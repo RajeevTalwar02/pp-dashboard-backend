@@ -7,13 +7,14 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// -----------------------------------------------------------------------
-// SOURCES
-// Update FADA_URL once per month (~7th of each month) when new data drops
-// -----------------------------------------------------------------------
-
-// ⬇️  UPDATE THIS LINE EACH MONTH with the new autoguideindia article URL
+// =====================================================================
+// MONTHLY URL UPDATE SECTION
+// Around the 8th of each month, update these 2 URLs with the new ones
+// =====================================================================
 const FADA_URL = 'https://www.autoguideindia.com/reports/auto-retail-growth-may-2026-fada-pv-sales-surge/';
+const JATO_URL = 'https://www.jato.com/resources/media-and-press-releases/indias-passenger-vehicle-market-records-3.96-lakh-units-in-may-2026-up-21.6-yoy';
+const AUTOPUNDITZ_URL = 'https://www.autopunditz.com/post/auto-punditz-monthly-auto-brief-may-2026-edition';
+// =====================================================================
 
 const SOURCES = [
   {
@@ -109,6 +110,51 @@ const SOURCES = [
         alt_fuel_share_pct: { type: 'number' },
       },
       required: ['pv_ev_share_pct', 'month', 'year'],
+    },
+  },
+  {
+    key: 'jato_body_type',
+    url: JATO_URL,
+    prompt: 'This page is a Jato Dynamics India monthly PV market press release. Extract the month and year, SUV share percentage of total PV sales, hatchback share percentage, sedan share percentage, MPV share percentage. Also extract total PV registrations, PV YoY growth percentage, and petrol/CNG/EV fuel share percentages if available.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        total_pv_units: { type: 'number' },
+        pv_yoy_pct: { type: 'number' },
+        suv_share_pct: { type: 'number' },
+        hatchback_share_pct: { type: 'number' },
+        sedan_share_pct: { type: 'number' },
+        mpv_share_pct: { type: 'number' },
+        petrol_share_pct: { type: 'number' },
+        cng_share_pct: { type: 'number' },
+        ev_share_pct: { type: 'number' },
+      },
+      required: ['suv_share_pct', 'month', 'year'],
+    },
+  },
+  {
+    key: 'autopunditz_segments',
+    url: AUTOPUNDITZ_URL,
+    prompt: 'This is a monthly auto industry brief. Extract segment-wise data: compact SUV sales units and YoY growth, mid-size SUV sales units and YoY growth, sedan sales units and YoY growth, MUV/MPV sales units and YoY growth, hatchback sales units and YoY growth if mentioned. Also extract the month and year being reported.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        compact_suv_units: { type: 'number' },
+        compact_suv_yoy_pct: { type: 'number' },
+        midsize_suv_units: { type: 'number' },
+        midsize_suv_yoy_pct: { type: 'number' },
+        sedan_units: { type: 'number' },
+        sedan_yoy_pct: { type: 'number' },
+        muv_units: { type: 'number' },
+        muv_yoy_pct: { type: 'number' },
+        hatchback_units: { type: 'number' },
+        hatchback_yoy_pct: { type: 'number' },
+      },
+      required: ['month', 'year'],
     },
   },
 ];
