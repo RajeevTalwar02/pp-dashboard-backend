@@ -29,19 +29,22 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Start small. Add more sources once this works end-to-end.
 
 const SOURCES = [
-  {
+   {
     key: 'siam_pv_total',
-    url: 'https://www.siam.in/statistics.aspx?mpgid=8&pgidtrail=14',
+    // The statistics.aspx archive page can serve old cached tables.
+    // The press-release page publishes one current "Monthly Performance"
+    // announcement, which is far more reliable for "latest month" data.
+    url: 'https://www.siam.in/press-release.aspx?mpgid=48&pgidtrail=50',
     prompt:
-      'Find the most recent monthly total passenger vehicle (PV) domestic sales figure for India reported by SIAM. Return the month, year, and the total unit count.',
+      'This page shows SIAM monthly press releases. Find the MOST RECENT "Monthly Performance" press release at the top of the page (the latest month announced, not an older one further down). From it, extract: the month and year being reported, and the total domestic Passenger Vehicle (PV) sales figure in units for that month. Ignore production figures and any prior-month releases below the latest one.',
     schema: {
       type: 'object',
       properties: {
-        month: { type: 'string' },
-        year: { type: 'string' },
-        total_pv_units: { type: 'number' },
+        month: { type: 'string', description: 'The month name of the most recent release, e.g. "April"' },
+        year: { type: 'string', description: 'The year of the most recent release, e.g. "2026"' },
+        total_pv_units: { type: 'number', description: 'Total domestic PV sales units for that month' },
       },
-      required: ['total_pv_units'],
+      required: ['total_pv_units', 'month', 'year'],
     },
   },
   {
