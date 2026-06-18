@@ -7,9 +7,6 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---------------------------------------------------------------------
-// STATIC SOURCES — URL never changes, always shows latest content
-// ---------------------------------------------------------------------
 const STATIC_SOURCES = [
   {
     key: 'siam_pv_total',
@@ -72,8 +69,8 @@ const STATIC_SOURCES = [
 ];
 
 // ---------------------------------------------------------------------
-// STEP 1 — Find the latest FADA article URL automatically
-// Searches autoguideindia.com so we never need to hardcode URLs again
+// STEP 1 — Find the latest FADA monthly retail article URL
+// Uses the /reports/ category listing page — always sorted latest first
 // ---------------------------------------------------------------------
 async function findLatestFadaArticleUrl() {
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
@@ -83,16 +80,17 @@ async function findLatestFadaArticleUrl() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-     url: 'https://www.autoguideindia.com/?s=FADA+monthly+auto+retail+sales',
+      url: 'https://www.autoguideindia.com/reports/',
       onlyMainContent: true,
       formats: [
         {
           type: 'json',
-          prompt: 'Find the URL of the most recent article reporting FADA overall monthly auto retail sales data covering ALL segments (PV, 2W, CV together) — NOT an article about just EVs or just one segment. The article title usually contains words like "auto retail", "vehicle retail", "FADA releases". Pick the most recent month and year. Return just that single article URL.',
+          prompt: 'This is a listing page of automotive reports. Find the URL of the most recent article about FADA overall monthly auto retail data — the article that covers ALL vehicle segments together (PV, 2W, CV) for the most recent month. The title typically contains words like "auto retail", "FADA", and a month name. Ignore articles that are only about EVs, only about one segment, or about a single OEM. Return the full URL of that single most recent article.',
           schema: {
             type: 'object',
             properties: {
-              latest_article_url: { type: 'string', description: 'Full URL of the most recent FADA monthly retail article' },
+              latest_article_url: { type: 'string' },
+              article_title: { type: 'string' },
               month: { type: 'string' },
               year: { type: 'string' },
             },
@@ -104,16 +102,18 @@ async function findLatestFadaArticleUrl() {
   });
 
   if (!response.ok) {
-    throw new Error(`Could not find latest FADA article: ${response.status}`);
+    const errText = await response.text();
+    throw new Error(`Could not load FADA listing page: ${response.status} ${errText}`);
   }
 
   const result = await response.json();
   const data = result.data?.json ?? result.json ?? null;
+  console.log('FADA article finder result:', JSON.stringify(data));
   return data?.latest_article_url ?? null;
 }
 
 // ---------------------------------------------------------------------
-// STEP 2 — Scrape the actual FADA article for all data in one call
+// STEP 2 — Scrape the FADA article for all data in one call
 // ---------------------------------------------------------------------
 async function scrapeFadaRetail(articleUrl) {
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
@@ -154,16 +154,13 @@ async function scrapeFadaRetail(articleUrl) {
   });
 
   if (!response.ok) {
-    throw new Error(`Could not scrape FADA article ${articleUrl}: ${response.status}`);
+    throw new Error(`Could not scrape FADA article: ${response.status}`);
   }
 
   const result = await response.json();
   return result.data?.json ?? result.json ?? null;
 }
 
-// ---------------------------------------------------------------------
-// CORE FUNCTIONS
-// ---------------------------------------------------------------------
 async function scrapeSource(source) {
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
     method: 'POST',
@@ -211,9 +208,6 @@ async function saveToSupabase(metricKey, value, sourceUrl) {
   }
 }
 
-// ---------------------------------------------------------------------
-// HANDLER
-// ---------------------------------------------------------------------
 export default async function handler(req, res) {
   const authHeader = req.headers['authorization'];
   if (authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -234,10 +228,10 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Dynamic FADA — auto-finds latest article then scrapes it
+  // 2. Dynamic FADA
   try {
     const latestUrl = await findLatestFadaArticleUrl();
-    if (!latestUrl) throw new Error('Could not find latest FADA article URL');
+    if (!latestUrl) throw new Error('Could not find latest FADA article URL on listing page');
 
     const fadaData = await scrapeFadaRetail(latestUrl);
 
