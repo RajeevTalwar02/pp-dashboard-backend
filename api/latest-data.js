@@ -16,6 +16,19 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default async function handler(req, res) {
+  // Allow this endpoint to be called from anywhere — including a local
+  // PP_Dashboard.html file opened directly in a browser (origin "null"
+  // or "file://"), and later your real domain once you connect one.
+  // Safe here because this endpoint only ever returns public dashboard
+  // data and accepts no writes.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   const { data, error } = await supabase
     .from('dashboard_metrics')
     .select('metric_key, value, source_url, updated_at');
