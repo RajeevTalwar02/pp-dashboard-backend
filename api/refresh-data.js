@@ -1,18 +1,3 @@
-// api/refresh-data.js
-//
-// This is a Vercel Serverless Function. Vercel Cron calls this URL on a
-// schedule (see vercel.json). It scrapes each source via Firecrawl,
-// asks Firecrawl's JSON mode to pull out specific numbers, and writes
-// the results into your Supabase table.
-//
-// Required environment variables (set these in the Vercel dashboard,
-// NEVER commit them to a file):
-//   FIRECRAWL_API_KEY   -> starts with fc-
-//   SUPABASE_URL        -> https://xxxx.supabase.co
-//   SUPABASE_ANON_KEY    -> your anon/publishable key
-//   CRON_SECRET          -> a random string you make up, to stop randoms
-//                            from triggering your scraper by guessing the URL
-
 import { createClient } from '@supabase/supabase-js';
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
@@ -22,27 +7,17 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---------------------------------------------------------------------
-// 1. DEFINE YOUR SOURCES + WHAT TO EXTRACT FROM EACH
-// ---------------------------------------------------------------------
-// Each entry = one Firecrawl /v2/scrape call with a JSON-mode schema.
-// Start small. Add more sources once this works end-to-end.
-
 const SOURCES = [
-   {
+  {
     key: 'siam_pv_total',
-    // The statistics.aspx archive page can serve old cached tables.
-    // The press-release page publishes one current "Monthly Performance"
-    // announcement, which is far more reliable for "latest month" data.
     url: 'https://www.siam.in/press-release.aspx?mpgid=48&pgidtrail=50',
-    prompt:
-      'This page shows SIAM monthly press releases. Find the MOST RECENT "Monthly Performance" press release at the top of the page (the latest month announced, not an older one further down). From it, extract: the month and year being reported, and the total domestic Passenger Vehicle (PV) sales figure in units for that month. Ignore production figures and any prior-month releases below the latest one.',
+    prompt: 'This page shows SIAM monthly press releases. Find the MOST RECENT "Monthly Performance" press release at the top of the page. Extract the month, year, and total domestic Passenger Vehicle (PV) sales figure in units for that month only.',
     schema: {
       type: 'object',
       properties: {
-        month: { type: 'string', description: 'The month name of the most recent release, e.g. "April"' },
-        year: { type: 'string', description: 'The year of the most recent release, e.g. "2026"' },
-        total_pv_units: { type: 'number', description: 'Total domestic PV sales units for that month' },
+        month: { type: 'string' },
+        year: { type: 'string' },
+        total_pv_units: { type: 'number' },
       },
       required: ['total_pv_units', 'month', 'year'],
     },
@@ -50,8 +25,7 @@ const SOURCES = [
   {
     key: 'autocar_latest_news',
     url: 'https://www.autocarindia.com/car-news',
-    prompt:
-      'List the 5 most recent automotive news headlines on this page, each with a one-sentence summary and the article URL if visible.',
+    prompt: 'List the 5 most recent automotive news headlines on this page, each with a one-sentence summary and the article URL.',
     schema: {
       type: 'object',
       properties: {
@@ -70,12 +44,67 @@ const SOURCES = [
       required: ['headlines'],
     },
   },
-  // Add more sources here following the same shape, e.g. FADA, EVReporter.
+  {
+    key: 'fada_pv_retail',
+    url: 'https://www.autoguideindia.com/reports/auto-retail-growth-may-2026-fada-pv-sales-surge/',
+    prompt: 'This page reports FADA monthly vehicle retail data. Extract the month and year, total PV retail units, PV YoY growth percentage, 2W retail units, 2W YoY growth percentage, CV retail units, CV YoY growth percentage, and total all-vehicle retail units.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        pv_units: { type: 'number' },
+        pv_yoy_pct: { type: 'number' },
+        tw_units: { type: 'number' },
+        tw_yoy_pct: { type: 'number' },
+        cv_units: { type: 'number' },
+        cv_yoy_pct: { type: 'number' },
+        total_units: { type: 'number' },
+      },
+      required: ['pv_units', 'month', 'year'],
+    },
+  },
+  {
+    key: 'fada_powertrain_mix',
+    url: 'https://newspatrolling.com/fada-releases-may26-vehicle-retail-data/',
+    prompt: 'This page reports FADA monthly vehicle retail data including powertrain mix. Extract the PV EV share percentage, PV CNG share percentage, 2W EV share percentage, overall alternative fuel share percentage, month and year being reported.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        pv_ev_share_pct: { type: 'number' },
+        pv_cng_share_pct: { type: 'number' },
+        tw_ev_share_pct: { type: 'number' },
+        alt_fuel_share_pct: { type: 'number' },
+      },
+      required: ['pv_ev_share_pct', 'month', 'year'],
+    },
+  },
+  {
+    key: 'ev_market_news',
+    url: 'https://evreporter.com/category/market/',
+    prompt: 'List the 3 most recent EV market news headlines on this page relevant to India, each with a one-sentence summary and article URL.',
+    schema: {
+      type: 'object',
+      properties: {
+        headlines: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              summary: { type: 'string' },
+              url: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: ['headlines'],
+    },
+  },
 ];
 
-// ---------------------------------------------------------------------
-// 2. CALL FIRECRAWL FOR ONE SOURCE
-// ---------------------------------------------------------------------
 async function scrapeSource(source) {
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
     method: 'POST',
@@ -105,9 +134,6 @@ async function scrapeSource(source) {
   return result.data?.json ?? result.json ?? null;
 }
 
-// ---------------------------------------------------------------------
-// 3. SAVE RESULT TO SUPABASE
-// ---------------------------------------------------------------------
 async function saveToSupabase(metricKey, value, sourceUrl) {
   const { error } = await supabase
     .from('dashboard_metrics')
@@ -126,12 +152,7 @@ async function saveToSupabase(metricKey, value, sourceUrl) {
   }
 }
 
-// ---------------------------------------------------------------------
-// 4. THE HANDLER VERCEL CALLS
-// ---------------------------------------------------------------------
 export default async function handler(req, res) {
-  // Simple protection so only your own Cron job (or you, manually) can
-  // trigger this — anyone else hitting the URL gets rejected.
   const authHeader = req.headers['authorization'];
   if (authHeader !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -147,7 +168,6 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error(err);
       results.push({ key: source.key, status: 'error', message: err.message });
-      // Continue to the next source even if one fails.
     }
   }
 
