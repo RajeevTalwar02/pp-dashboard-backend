@@ -83,12 +83,12 @@ async function findLatestFadaArticleUrl() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      url: 'https://www.autoguideindia.com/?s=FADA+vehicle+retail',
+     url: 'https://www.autoguideindia.com/?s=FADA+monthly+auto+retail+sales',
       onlyMainContent: true,
       formats: [
         {
           type: 'json',
-          prompt: 'Find the URL of the most recent article about FADA monthly vehicle retail data (the one with the highest/most recent month and year). Return just that single article URL.',
+          prompt: 'Find the URL of the most recent article reporting FADA overall monthly auto retail sales data covering ALL segments (PV, 2W, CV together) — NOT an article about just EVs or just one segment. The article title usually contains words like "auto retail", "vehicle retail", "FADA releases". Pick the most recent month and year. Return just that single article URL.',
           schema: {
             type: 'object',
             properties: {
