@@ -7,7 +7,15 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STATIC_SOURCES = [
+// -----------------------------------------------------------------------
+// SOURCES
+// Update FADA_URL once per month (~7th of each month) when new data drops
+// -----------------------------------------------------------------------
+
+// ⬇️  UPDATE THIS LINE EACH MONTH with the new autoguideindia article URL
+const FADA_URL = 'https://www.autoguideindia.com/reports/auto-retail-growth-may-2026-fada-pv-sales-surge/';
+
+const SOURCES = [
   {
     key: 'siam_pv_total',
     url: 'https://www.siam.in/press-release.aspx?mpgid=48&pgidtrail=50',
@@ -66,100 +74,44 @@ const STATIC_SOURCES = [
       required: ['headlines'],
     },
   },
+  {
+    key: 'fada_pv_retail',
+    url: FADA_URL,
+    prompt: 'This page reports FADA monthly vehicle retail data. Extract the month and year, total PV retail units, PV YoY growth percentage, 2W retail units, 2W YoY growth percentage, CV retail units, CV YoY growth percentage, and total all-vehicle retail units.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        pv_units: { type: 'number' },
+        pv_yoy_pct: { type: 'number' },
+        tw_units: { type: 'number' },
+        tw_yoy_pct: { type: 'number' },
+        cv_units: { type: 'number' },
+        cv_yoy_pct: { type: 'number' },
+        total_units: { type: 'number' },
+      },
+      required: ['pv_units', 'month', 'year'],
+    },
+  },
+  {
+    key: 'fada_powertrain_mix',
+    url: FADA_URL,
+    prompt: 'This page reports FADA monthly vehicle retail data including powertrain mix. Extract the PV EV share percentage, PV CNG share percentage, 2W EV share percentage, overall alternative fuel share percentage, month and year being reported.',
+    schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string' },
+        year: { type: 'string' },
+        pv_ev_share_pct: { type: 'number' },
+        pv_cng_share_pct: { type: 'number' },
+        tw_ev_share_pct: { type: 'number' },
+        alt_fuel_share_pct: { type: 'number' },
+      },
+      required: ['pv_ev_share_pct', 'month', 'year'],
+    },
+  },
 ];
-
-// ---------------------------------------------------------------------
-// STEP 1 — Find the latest FADA monthly retail article URL
-// Uses the /reports/ category listing page — always sorted latest first
-// ---------------------------------------------------------------------
-async function findLatestFadaArticleUrl() {
-  const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: 'https://www.autoguideindia.com/reports/',
-      onlyMainContent: true,
-      formats: [
-        {
-          type: 'json',
-          prompt: 'This is a listing page of automotive reports. Find the URL of the most recent article about FADA overall monthly auto retail data — the article that covers ALL vehicle segments together (PV, 2W, CV) for the most recent month. The title typically contains words like "auto retail", "FADA", and a month name. Ignore articles that are only about EVs, only about one segment, or about a single OEM. Return the full URL of that single most recent article.',
-          schema: {
-            type: 'object',
-            properties: {
-              latest_article_url: { type: 'string' },
-              article_title: { type: 'string' },
-              month: { type: 'string' },
-              year: { type: 'string' },
-            },
-            required: ['latest_article_url'],
-          },
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Could not load FADA listing page: ${response.status} ${errText}`);
-  }
-
-  const result = await response.json();
-  const data = result.data?.json ?? result.json ?? null;
-  console.log('FADA article finder result:', JSON.stringify(data));
-  return data?.latest_article_url ?? null;
-}
-
-// ---------------------------------------------------------------------
-// STEP 2 — Scrape the FADA article for all data in one call
-// ---------------------------------------------------------------------
-async function scrapeFadaRetail(articleUrl) {
-  const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: articleUrl,
-      onlyMainContent: true,
-      formats: [
-        {
-          type: 'json',
-          prompt: 'This page reports FADA monthly vehicle retail data. Extract the month and year, total PV retail units, PV YoY growth percentage, 2W retail units, 2W YoY growth percentage, CV retail units, CV YoY growth percentage, total all-vehicle retail units, PV EV share percentage, PV CNG share percentage, 2W EV share percentage, and overall alternative fuel share percentage.',
-          schema: {
-            type: 'object',
-            properties: {
-              month: { type: 'string' },
-              year: { type: 'string' },
-              pv_units: { type: 'number' },
-              pv_yoy_pct: { type: 'number' },
-              tw_units: { type: 'number' },
-              tw_yoy_pct: { type: 'number' },
-              cv_units: { type: 'number' },
-              cv_yoy_pct: { type: 'number' },
-              total_units: { type: 'number' },
-              pv_ev_share_pct: { type: 'number' },
-              pv_cng_share_pct: { type: 'number' },
-              tw_ev_share_pct: { type: 'number' },
-              alt_fuel_share_pct: { type: 'number' },
-            },
-            required: ['pv_units', 'month', 'year'],
-          },
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Could not scrape FADA article: ${response.status}`);
-  }
-
-  const result = await response.json();
-  return result.data?.json ?? result.json ?? null;
-}
 
 async function scrapeSource(source) {
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
@@ -216,8 +168,7 @@ export default async function handler(req, res) {
 
   const results = [];
 
-  // 1. Static sources
-  for (const source of STATIC_SOURCES) {
+  for (const source of SOURCES) {
     try {
       const data = await scrapeSource(source);
       await saveToSupabase(source.key, data, source.url);
@@ -226,30 +177,6 @@ export default async function handler(req, res) {
       console.error(err);
       results.push({ key: source.key, status: 'error', message: err.message });
     }
-  }
-
-  // 2. Dynamic FADA
-  try {
-    const latestUrl = await findLatestFadaArticleUrl();
-    if (!latestUrl) throw new Error('Could not find latest FADA article URL on listing page');
-
-    const fadaData = await scrapeFadaRetail(latestUrl);
-
-    await saveToSupabase('fada_pv_retail', fadaData, latestUrl);
-    await saveToSupabase('fada_powertrain_mix', {
-      month: fadaData.month,
-      year: fadaData.year,
-      pv_ev_share_pct: fadaData.pv_ev_share_pct,
-      pv_cng_share_pct: fadaData.pv_cng_share_pct,
-      tw_ev_share_pct: fadaData.tw_ev_share_pct,
-      alt_fuel_share_pct: fadaData.alt_fuel_share_pct,
-    }, latestUrl);
-
-    results.push({ key: 'fada_pv_retail', status: 'ok', source: latestUrl });
-    results.push({ key: 'fada_powertrain_mix', status: 'ok', source: latestUrl });
-  } catch (err) {
-    console.error(err);
-    results.push({ key: 'fada_dynamic', status: 'error', message: err.message });
   }
 
   return res.status(200).json({
