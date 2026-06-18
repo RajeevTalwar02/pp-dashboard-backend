@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/refresh-data",
-      "schedule": "0 */6 * * *"
+      "schedule": "30 0 * * *"
     }
   ]
 }
