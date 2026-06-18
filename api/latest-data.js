@@ -37,6 +37,6 @@ export default async function handler(req, res) {
 
   // Cache for 5 minutes at the edge so repeated page loads don't all
   // hit Supabase directly — cheap and keeps things fast.
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
   return res.status(200).json(shaped);
 }
